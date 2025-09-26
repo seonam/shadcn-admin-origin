@@ -39,10 +39,11 @@ export default function Dashboard() {
     },
   } satisfies ChartConfig
 
-  const customData = [
-    { browser: "desktop", visitors: 450 },
-    { browser: "mobile", visitors: 320 },
-    { browser: "tablet", visitors: 180 },
+  const podStatusData = [
+    { status: "Running", count: 120, fill: "var(--chart-2)" },
+    { status: "Succeeded", count: 30, fill: "var(--chart-1)" },
+    { status: "Pending", count: 15, fill: "var(--chart-3)" },
+    { status: "Failed", count: 5, fill: "var(--chart-5)" },
   ]
 
   return (
@@ -59,14 +60,16 @@ export default function Dashboard() {
 
       {/* ===== Main ===== */}
       <Main>
-        // Memory 차트
-        <DonutChart
-          data={customData}
-          title="Device Usage Statistics"
-          description="March - August 2024"
-          trendText="Mobile usage increased by 8.3%"
-          footerText="Based on web analytics data"
-        />
+        <div className="w-full max-w-lg">
+          <DonutChart
+            data={podStatusData}
+            dataKey="count"
+            nameKey="status"
+            title="Pod Status"
+            description="Overview of Kubernetes pod statuses."
+            footerText="Total pods in the cluster"
+          />
+        </div>
         <ChartRadial
           metricKey="memory"
           data={metricData}
@@ -389,8 +392,8 @@ export const description = "A donut chart with text"
 
 // 데이터 타입 정의
 interface ChartDataItem {
-  browser: string
-  visitors: number
+  status: string
+  count: number
   fill?: string
 }
 
@@ -405,132 +408,125 @@ interface DonutChartProps {
   data: ChartDataItem[]
   title?: string
   description?: string
-  trendText?: string
   footerText?: string
+  dataKey: string
+  nameKey: string
 }
 
 export function DonutChart({
-                             data,
-                             title = "Pie Chart - Donut with Text",
-                             description = "January - June 2024",
-                             trendText = "Trending up by 5.2% this month",
-                             footerText = "Showing total visitors for the last 6 months"
-                           }: DonutChartProps) {
-
-  // 차트 데이터 (색상 자동 할당)
+  data,
+  title = "Donut Chart",
+  description,
+  footerText,
+  dataKey,
+  nameKey,
+}: DonutChartProps) {
   const chartData = React.useMemo(() => {
     return data.map((item, index) => ({
       ...item,
-      fill: item.fill || `var(--chart-${index + 1})`
+      fill: item.fill || `var(--chart-${index + 1})`,
     }))
   }, [data])
 
-  // 차트 설정 자동 생성
   const chartConfig: ChartConfig = React.useMemo(() => {
     const config: ChartConfig = {
-      visitors: { label: "Visitors" }
+      [dataKey]: { label: dataKey },
     }
-
-    data.forEach((item, index) => {
-      config[item.browser] = {
-        label: item.browser,
-        color: `var(--chart-${index + 1})`
+    chartData.forEach((item) => {
+      config[item[nameKey]] = {
+        label: item[nameKey],
+        color: item.fill,
       }
     })
-
     return config
-  }, [data])
+  }, [chartData, dataKey, nameKey])
 
-  const totalVisitors = React.useMemo(
-    () => chartData.reduce((acc, curr) => acc + curr.visitors, 0),
-    [chartData]
+  const totalValue = React.useMemo(
+    () => chartData.reduce((acc, curr) => acc + curr[dataKey], 0),
+    [chartData, dataKey]
   )
 
   return (
-    <div className="flex flex-col">
-      {/* 헤더 */}
-      <div className="items-center pb-4">
-        <h3 className="text-lg font-semibold">{title}</h3>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-
-      {/* 차트와 범례 */}
-      <div className="flex gap-4 pb-4">
-        {/* 차트 영역 */}
-        <div className="flex-1 max-w-[250px]">
-          <ChartContainer config={chartConfig} className="w-full h-[250px]">
-            <PieChart>
-              <ChartTooltip
-                cursor={false}
-                content={<ChartTooltipContent hideLabel />}
-              />
-              <Pie
-                data={chartData}
-                dataKey="visitors"
-                nameKey="browser"
-                innerRadius={60}
-                strokeWidth={5}
-              >
-                <Label
-                  content={({ viewBox }) => {
-                    if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                      return (
-                        <text
-                          x={viewBox.cx}
-                          y={viewBox.cy}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                        >
-                          <tspan
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="flex items-center justify-center p-6">
+        <div className="flex w-full items-center gap-6">
+          <div className="flex-1 max-w-[200px]">
+            <ChartContainer config={chartConfig} className="w-full h-[200px]">
+              <PieChart>
+                <ChartTooltip
+                  cursor={false}
+                  content={<ChartTooltipContent hideLabel />}
+                />
+                <Pie
+                  data={chartData}
+                  dataKey={dataKey}
+                  nameKey={nameKey}
+                  innerRadius={50}
+                  strokeWidth={5}
+                >
+                  <Label
+                    content={({ viewBox }) => {
+                      if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                        return (
+                          <text
                             x={viewBox.cx}
                             y={viewBox.cy}
-                            className="fill-foreground text-3xl font-bold"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
                           >
-                            {totalVisitors.toLocaleString()}
-                          </tspan>
-                          <tspan
-                            x={viewBox.cx}
-                            y={(viewBox.cy || 0) + 24}
-                            className="fill-muted-foreground"
-                          >
-                            Visitors
-                          </tspan>
-                        </text>
-                      )
-                    }
-                  }}
+                            <tspan
+                              x={viewBox.cx}
+                              y={viewBox.cy}
+                              className="fill-foreground text-2xl font-bold"
+                            >
+                              {totalValue.toLocaleString()}
+                            </tspan>
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy || 0) + 20}
+                              className="fill-muted-foreground text-sm"
+                            >
+                              Pods
+                            </tspan>
+                          </text>
+                        )
+                      }
+                    }}
+                  />
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+          </div>
+
+          <div className="flex flex-col justify-center gap-2 text-sm">
+            {chartData.map((item) => (
+              <div key={item[nameKey]} className="flex items-center gap-2">
+                <span
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: item.fill }}
                 />
-              </Pie>
-            </PieChart>
-          </ChartContainer>
+                <span className="font-medium capitalize text-muted-foreground w-20">
+                  {item[nameKey]}
+                </span>
+                <span className="font-bold ml-auto">
+                  {item[dataKey]}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-
-        {/* 범례 */}
-        <div className="flex flex-col justify-center gap-2">
-          {chartData.map((item, index) => (
-            <div key={item.browser} className="flex items-center gap-2">
-              <span
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: `var(--chart-${index + 1})` }}
-              />
-              <span className="font-medium capitalize">{item.browser}</span>
-              <span className="text-muted-foreground">
-                {item.visitors.toLocaleString()}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 푸터 */}
-      <div className="flex flex-col gap-2 text-sm">
-        <div className="flex items-center gap-2 leading-none font-medium">
-          {trendText} <TrendingUp className="h-4 w-4" />
-        </div>
-        <div className="text-muted-foreground leading-none">
-          {footerText}
-        </div>
-      </div>
-    </div>
+      </CardContent>
+      {footerText && (
+        <CardFooter>
+          <div className="text-xs text-muted-foreground">
+            {footerText}
+          </div>
+        </CardFooter>
+      )}
+    </Card>
   )
 }
