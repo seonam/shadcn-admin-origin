@@ -15,6 +15,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import * as React from "react"
 import { Label, Pie, PieChart, RadialBar, RadialBarChart, PolarRadiusAxis } from "recharts"
+import { PodInfoTable } from "./components/pod-info-table"
 
 // --- Main Dashboard Component --- //
 
@@ -46,34 +47,37 @@ export default function Dashboard() {
       </Header>
 
       <Main>
-        <Card>
-          <CardHeader>
-            <CardTitle>Kubernetes Cluster Overview</CardTitle>
-            <CardDescription>An overview of pod statuses and resource usage.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-8">
-              {/* --- Pod Status Section --- */}
-              <div className="flex flex-col items-center w-full">
-                <h3 className="text-lg font-semibold mb-4">Pod Status</h3>
-                <DonutChart data={podStatusData} dataKey="count" nameKey="status" />
-              </div>
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Kubernetes Cluster Overview</CardTitle>
+              <CardDescription>An overview of pod statuses and resource usage.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-8">
+                {/* --- Pod Status Section --- */}
+                <div className="flex flex-col items-center w-full">
+                  <h3 className="text-lg font-semibold mb-4">Pod Status</h3>
+                  <DonutChart data={podStatusData} dataKey="count" nameKey="status" />
+                </div>
 
-              {/* --- Resource Usage Section --- */}
-              <div className="flex flex-col items-center w-full">
-                <h3 className="text-lg font-semibold mb-4">Resource Usage</h3>
-                <div className="w-full flex justify-around items-start gap-x-4 pt-6">
-                  <div className="flex-1 max-w-[250px]">
-                    <ChartRadial metricKey="memory" data={memoryData} config={resourceConfig} title="Memory" unit="Gi" />
-                  </div>
-                  <div className="flex-1 max-w-[250px]">
-                    <ChartRadial metricKey="cpu" data={cpuData} config={resourceConfig} title="CPU" unit="Cores" />
+                {/* --- Resource Usage Section --- */}
+                <div className="flex flex-col items-center w-full">
+                  <h3 className="text-lg font-semibold mb-4">Resource Usage</h3>
+                  <div className="w-full flex justify-around items-start gap-x-4 pt-6">
+                    <div className="flex-1 max-w-[250px]">
+                      <ChartRadial metricKey="memory" data={memoryData} config={resourceConfig} title="Memory" unit="Gi" />
+                    </div>
+                    <div className="flex-1 max-w-[250px]">
+                      <ChartRadial metricKey="cpu" data={cpuData} config={resourceConfig} title="CPU" unit="Cores" />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+          <PodInfoTable />
+        </div>
       </Main>
     </>
   )
