@@ -1,0 +1,18 @@
+build:
+  image: buildah
+  script:
+    - buildah images
+    - buildah login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+    - buildah build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG} .
+    - buildah push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
+
+push:
+  image: docker:dind
+  script:
+    - docker images
+    - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+    - docker pull ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
+    - docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG} ${ECR}
+    - docker push
+    - docker rmi $ECR
+    - docker rmi $(docker images -q -f dangling=true) || true

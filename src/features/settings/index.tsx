@@ -51,28 +51,21 @@ export default function Settings() {
 
 const sidebarNavItems = [
   {
-    title: 'Profile',
-    icon: <IconUser size={18} />,
-    href: '/settings',
-  },
-  {
-    title: 'Account',
-    icon: <IconTool size={18} />,
-    href: '/settings/account',
-  },
-  {
-    title: 'Appearance',
-    icon: <IconPalette size={18} />,
-    href: '/settings/appearance',
-  },
-  {
-    title: 'Notifications',
-    icon: <IconNotification size={18} />,
-    href: '/settings/notifications',
-  },
-  {
-    title: 'Display',
+    title: 'Application',
     icon: <IconBrowserCheck size={18} />,
-    href: '/settings/display',
+    href: '/settings/application',
+  },
+  {
+    title: 'Deployment',
+    icon: <IconBrowserCheck size={18} />,
+    href: '/settings/self-service',
+  },
+  {
+    title: 'Secret',
+    icon: <IconBrowserCheck size={18} />,
+    href: '/settings/self-service',
   },
 ]
+
+
+
