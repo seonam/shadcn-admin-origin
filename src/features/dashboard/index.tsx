@@ -16,8 +16,9 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import * as React from "react"
 import { Label, Pie, PieChart, RadialBar, RadialBarChart, PolarRadiusAxis } from "recharts"
 import { PodInfoTable } from "./components/pod-info-table"
+import { PodUsageCharts } from "./components/pod-usage-charts"
 
-// --- Main Dashboard Component --- //
+// --- Chart Components --- //
 
 export default function Dashboard() {
   const podStatusData = [
@@ -76,6 +77,8 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+
+          <PodUsageCharts />
           <PodInfoTable />
         </div>
       </Main>
