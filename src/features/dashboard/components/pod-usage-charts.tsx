@@ -28,27 +28,37 @@ import {
 import * as React from "react"
 import { useGetMetricByRange, RangeVector } from "../hooks/use-metrics";
 import { Skeleton } from "@/components/ui/skeleton";
+import dayjs from "dayjs";
 
 // --- DATA TRANSFORMATION ---
 const transformUsageVectorForChart = (vector?: RangeVector) => {
-  if (!vector?.data.result) return [];
-  
+  if (!vector?.data.result || vector.data.result.length === 0) return { chartData: [], podConfigs: {} };
+
+  const oneDayAgo = dayjs().subtract(1, 'day').unix();
+
+  // Filter for series that have at least one data point in the last 24 hours
+  const recentSeries = vector.data.result.filter(series =>
+    series.values.some(([ts]) => ts > oneDayAgo)
+  );
+
+  if (recentSeries.length === 0) return { chartData: [], podConfigs: {} };
+
   const timestamps = new Set<number>();
-  vector.data.result.forEach(series => {
+  recentSeries.forEach(series => {
     series.values.forEach(([ts]) => timestamps.add(ts));
   });
 
   const sortedTimestamps = Array.from(timestamps).sort();
 
-  const podNames = vector.data.result.map(s => s.metric.pod);
-  const podConfigs = podNames.reduce((acc, podName, index) => {
+  const podConfigs = recentSeries.reduce((acc, series, index) => {
+    const podName = series.metric.pod;
     acc[podName] = { label: podName, color: `var(--chart-${index + 1})` };
     return acc;
   }, {} as Record<string, { label: string; color: string }>);
 
   const chartData = sortedTimestamps.map(ts => {
     const dataPoint: any = { date: ts * 1000 };
-    vector.data.result.forEach(series => {
+    recentSeries.forEach(series => {
       const valueEntry = series.values.find(([timestamp]) => timestamp === ts);
       dataPoint[series.metric.pod] = valueEntry ? parseFloat(valueEntry[1]) : null;
     });
@@ -100,7 +110,7 @@ const UsageAreaChart = ({ data, podConfigs }: { data: any[], podConfigs: any }) 
 
 // --- Main Export Component ---
 export function PodUsageCharts() {
-  const [timeRange, setTimeRange] = React.useState("15m");
+  const [timeRange, setTimeRange] = React.useState("1h");
 
   const { data: cpuVector, isLoading: isCpuLoading } = useGetMetricByRange(1, 'pod_cpu_usage_range', timeRange);
   const { data: memoryVector, isLoading: isMemoryLoading } = useGetMetricByRange(1, 'pod_memory_usage_range', timeRange);
@@ -122,9 +132,9 @@ export function PodUsageCharts() {
             <SelectValue placeholder="Select time range" />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
-            <SelectItem value="60m" className="rounded-lg">Last 60 minutes</SelectItem>
-            <SelectItem value="30m" className="rounded-lg">Last 30 minutes</SelectItem>
-            <SelectItem value="15m" className="rounded-lg">Last 15 minutes</SelectItem>
+            <SelectItem value="24h" className="rounded-lg">Last 24 hours</SelectItem>
+            <SelectItem value="6h" className="rounded-lg">Last 6 hours</SelectItem>
+            <SelectItem value="1h" className="rounded-lg">Last 1 hour</SelectItem>
           </SelectContent>
         </Select>
       </CardHeader>

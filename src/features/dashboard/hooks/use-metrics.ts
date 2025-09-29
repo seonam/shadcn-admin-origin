@@ -96,8 +96,7 @@ const MOCK_DATA_STORE: Record<string, any> = {
   cpu_usage: { projectId: 1, data: { resultType: "matrix", result: [{ metric: {}, values: [[1716966480, "1.2"], [1716966540, "1.5"], [1716966600, "5.8"]] }] } },
   memory_limit: { projectId: 1, data: { resultType: "vector", result: [{ metric: {}, value: [1716966982.249, "64"] }] } },
   memory_usage: { projectId: 1, data: { resultType: "matrix", result: [{ metric: {}, values: [[1716966480, "28.1"], [1716966540, "30.5"], [1716966600, "35.4"]] }] } },
-  pod_cpu_usage_range: generateTimeSeriesData(POD_NAMES, 60, 'cores'),
-  pod_memory_usage_range: generateTimeSeriesData(POD_NAMES, 60, 'MB'),
+  // Static data for range queries are now generated dynamically in the hook
 };
 
 // --- API Hooks --- //
@@ -115,7 +114,14 @@ function useGetMetricQuery<T>(projectId: number, query: string, timeRange?: stri
           let result = MOCK_DATA_STORE[query];
           // Handle dynamic generation for time-series data
           if (query === 'pod_cpu_usage_range' || query === 'pod_memory_usage_range') {
-            const timeMinutes = parseInt(timeRange?.replace('m', '') || '60');
+            let timeMinutes = 60;
+            if (timeRange) {
+              if (timeRange.includes('h')) {
+                timeMinutes = parseInt(timeRange.replace('h', '')) * 60;
+              } else if (timeRange.includes('m')) {
+                timeMinutes = parseInt(timeRange.replace('m', ''));
+              }
+            }
             const unit = query === 'pod_cpu_usage_range' ? 'cores' : 'MB';
             result = generateTimeSeriesData(POD_NAMES, timeMinutes, unit);
           }
