@@ -28,8 +28,8 @@ export interface PodInfo {
   podName: string;
   created: number;
   restarts: number;
-  cpuUsage: string;
   memoryUsage: string;
+  memoryLimit: string;
 }
 
 export type DonutChartData = {
@@ -63,6 +63,7 @@ const POD_NAMES = [
   "frontend-api-6b7b8c9c-x4v2f",
   "worker-jobs-7a8c9d0e-q5r6t",
   "database-connector-f9g0h1i2-z3y4x",
+  "frontend-api-6b7b8c9c-a8b3d",
 ];
 
 // --- Mock Data Store --- //
@@ -80,23 +81,44 @@ const MOCK_DATA_STORE: Record<string, any> = {
       ],
     },
   },
-  pod_info: {
-    projectId: 1,
-    data: {
-      resultType: "vector",
-      result: [
-        { metric: { podName: "frontend-api-6b7b8c9c-x4v2f", created: (new Date().getTime() / 1000 - 60 * 60 * 24 * 3).toString(), restarts: "0", cpuUsage: "0.15", memoryUsage: "256000000" }, value: [Date.now(), "1"] },
-        { metric: { podName: "frontend-api-6b7b8c9c-a8b3d", created: (new Date().getTime() / 1000 - 60 * 60 * 12).toString(), restarts: "2", cpuUsage: "0.25", memoryUsage: "288000000" }, value: [Date.now(), "1"] },
-        { metric: { podName: "worker-jobs-7a8c9d0e-q5r6t", created: (new Date().getTime() / 1000 - 60 * 5).toString(), restarts: "0", cpuUsage: "1.10", memoryUsage: "512000000" }, value: [Date.now(), "1"] },
-        { metric: { podName: "database-connector-f9g0h1i2-z3y4x", created: (new Date().getTime() / 1000 - 60 * 60 * 24 * 10).toString(), restarts: "12", cpuUsage: "0.05", memoryUsage: "128000000" }, value: [Date.now(), "1"] },
-      ],
-    },
+  pod_created: {
+    projectId: 1, data: { resultType: "vector", result: [
+      { metric: { pod: POD_NAMES[0] }, value: [Date.now(), (new Date().getTime() / 1000 - 60 * 60 * 24 * 3).toString()] },
+      { metric: { pod: POD_NAMES[1] }, value: [Date.now(), (new Date().getTime() / 1000 - 60 * 5).toString()] },
+      { metric: { pod: POD_NAMES[2] }, value: [Date.now(), (new Date().getTime() / 1000 - 60 * 60 * 24 * 10).toString()] },
+      { metric: { pod: POD_NAMES[3] }, value: [Date.now(), (new Date().getTime() / 1000 - 60 * 60 * 12).toString()] },
+    ]}
+  },
+  pod_restarts: {
+    projectId: 1, data: { resultType: "vector", result: [
+      { metric: { pod: POD_NAMES[0] }, value: [Date.now(), "0"] },
+      { metric: { pod: POD_NAMES[1] }, value: [Date.now(), "0"] },
+      { metric: { pod: POD_NAMES[2] }, value: [Date.now(), "12"] },
+      { metric: { pod: POD_NAMES[3] }, value: [Date.now(), "2"] },
+    ]}
+  },
+  pod_memory_used: {
+    projectId: 1, data: { resultType: "vector", result: [
+      { metric: { pod: POD_NAMES[0] }, value: [Date.now(), "256000000"] },
+      { metric: { pod: POD_NAMES[1] }, value: [Date.now(), "512000000"] },
+      { metric: { pod: POD_NAMES[2] }, value: [Date.now(), "128000000"] },
+      { metric: { pod: POD_NAMES[3] }, value: [Date.now(), "288000000"] },
+    ]}
+  },
+  pod_memory_limit: {
+    projectId: 1, data: { resultType: "vector", result: [
+      { metric: { pod: POD_NAMES[0] }, value: [Date.now(), "512000000"] },
+      { metric: { pod: POD_NAMES[1] }, value: [Date.now(), "1024000000"] },
+      { metric: { pod: POD_NAMES[2] }, value: [Date.now(), "256000000"] },
+      { metric: { pod: POD_NAMES[3] }, value: [Date.now(), "512000000"] },
+    ]}
   },
   cpu_limit: { projectId: 1, data: { resultType: "vector", result: [{ metric: {}, value: [1716966982.249, "8"] }] } },
   cpu_usage: { projectId: 1, data: { resultType: "matrix", result: [{ metric: {}, values: [[1716966480, "1.2"], [1716966540, "1.5"], [1716966600, "5.8"]] }] } },
   memory_limit: { projectId: 1, data: { resultType: "vector", result: [{ metric: {}, value: [1716966982.249, "64"] }] } },
   memory_usage: { projectId: 1, data: { resultType: "matrix", result: [{ metric: {}, values: [[1716966480, "28.1"], [1716966540, "30.5"], [1716966600, "35.4"]] }] } },
-  // Static data for range queries are now generated dynamically in the hook
+  pod_cpu_usage_range: generateTimeSeriesData(POD_NAMES, 60, 'cores'),
+  pod_memory_usage_range: generateTimeSeriesData(POD_NAMES, 60, 'MB'),
 };
 
 // --- API Hooks --- //
@@ -112,7 +134,6 @@ function useGetMetricQuery<T>(projectId: number, query: string, timeRange?: stri
       setTimeout(() => {
         try {
           let result = MOCK_DATA_STORE[query];
-          // Handle dynamic generation for time-series data
           if (query === 'pod_cpu_usage_range' || query === 'pod_memory_usage_range') {
             let timeMinutes = 60;
             if (timeRange) {
@@ -135,7 +156,7 @@ function useGetMetricQuery<T>(projectId: number, query: string, timeRange?: stri
           setError(e);
         }
         setIsLoading(false);
-      }, 500); // Simulate network delay
+      }, 500);
     };
 
     if (projectId) {
@@ -153,3 +174,10 @@ export function useGetMetric(projectId: number, query: string): { data: InstantV
 export function useGetMetricByRange(projectId: number, query: string, timeRange?: string): { data: RangeVector | undefined; isLoading: boolean; error: Error | null } {
     return useGetMetricQuery<RangeVector>(projectId, query, timeRange);
 }
+
+// Specific hooks for PodInfoTable
+export const useGetCreated = (projectId: number) => useGetMetric(projectId, "pod_created");
+export const useGetRestartsTotal = (projectId: number) => useGetMetric(projectId, "pod_restarts");
+export const useGetMemoryUsed = (projectId: number) => useGetMetric(projectId, "pod_memory_used");
+export const useGetMemoryLimit = (projectId: number) => useGetMetric(projectId, "pod_memory_limit");
+

@@ -18,57 +18,15 @@ import {
   RangeVector,
   DonutChartData,
 } from "./hooks/use-metrics";
+import {
+  parseInstantVectorToSingleValue,
+  parseRangeVectorToSingleValue,
+  parsePodStatusVector,
+} from "./utils/parsers";
 
-// --- Data Types and Parsers --- //
+// --- Data Types --- //
 
 type ChartDisplayConfig = Record<string, { label: string; color: string }>;
-
-function parseInstantVectorToSingleValue(vector?: InstantVector): number {
-  try {
-    const value = vector?.data.result?.[0]?.value?.[1];
-    return value ? parseFloat(value) : 0;
-  } catch (error) {
-    console.error("Error parsing instant vector:", error);
-    return 0;
-  }
-}
-
-function parseRangeVectorToSingleValue(matrix?: RangeVector): number {
-  try {
-    const values = matrix?.data.result?.[0]?.values;
-    if (Array.isArray(values) && values.length > 0) {
-      const latestValue = values[values.length - 1]?.[1];
-      return latestValue ? parseFloat(latestValue) : 0;
-    }
-    return 0;
-  } catch (error) {
-    console.error("Error parsing range vector:", error);
-    return 0;
-  }
-}
-
-function parsePodStatusVector(vector?: InstantVector): DonutChartData[] {
-  if (!vector) return [];
-  const colorMap: Record<string, string> = {
-    Running: "var(--chart-2)",
-    Succeeded: "var(--chart-1)",
-    Pending: "var(--chart-3)",
-    Failed: "var(--chart-5)",
-  };
-  try {
-    return vector.data.result.map(item => {
-      const phase = item.metric.phase;
-      return {
-        name: phase,
-        value: parseFloat(item.value[1]),
-        fill: colorMap[phase] || "var(--chart-4)",
-      };
-    });
-  } catch (error) {
-    console.error("Error parsing pod status vector:", error);
-    return [];
-  }
-}
 
 // --- Main Dashboard Component --- //
 
@@ -131,7 +89,7 @@ function KubernetesClusterOverview() {
             <Skeleton className="w-full h-full" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg: grid-cols-2 items-start gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-8">
             <div className="flex flex-col items-center w-full">
               <h3 className="text-lg font-semibold mb-4">Pod Status</h3>
               <DonutChart data={podStatusData} dataKey="value" nameKey="name" />
@@ -324,4 +282,5 @@ function DonutChart({ data, dataKey, nameKey }: { data: Record<string, any>[]; d
     </div>
   );
 }
+
 

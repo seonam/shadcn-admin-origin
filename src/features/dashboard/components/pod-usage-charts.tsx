@@ -23,12 +23,15 @@ import {
   AreaChart,
   Area,
   XAxis,
+  YAxis,
   CartesianGrid,
+  ReferenceLine,
 } from 'recharts'
 import * as React from "react"
-import { useGetMetricByRange, RangeVector } from "../hooks/use-metrics";
+import { useGetMetric, useGetMetricByRange, RangeVector, InstantVector } from "../hooks/use-metrics";
 import { Skeleton } from "@/components/ui/skeleton";
 import dayjs from "dayjs";
+import { parseInstantVectorToSingleValue } from "../utils/parsers";
 
 // --- DATA TRANSFORMATION ---
 const transformUsageVectorForChart = (vector?: RangeVector) => {
@@ -69,7 +72,7 @@ const transformUsageVectorForChart = (vector?: RangeVector) => {
 };
 
 // --- Reusable Area Chart Component ---
-const UsageAreaChart = ({ data, podConfigs }: { data: any[], podConfigs: any }) => (
+const UsageAreaChart = ({ data, podConfigs, limit }: { data: any[], podConfigs: any, limit?: number }) => (
   <ChartContainer config={podConfigs} className="aspect-auto h-[250px] w-full">
     <AreaChart data={data}>
       <defs>
@@ -89,6 +92,21 @@ const UsageAreaChart = ({ data, podConfigs }: { data: any[], podConfigs: any }) 
         minTickGap={32}
         tickFormatter={(value) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       />
+      <YAxis
+        tickLine={false}
+        axisLine={false}
+        tickMargin={8}
+        domain={[0, (dataMax: number) => Math.ceil(Math.max(dataMax, limit || 0) * 1.1)]}
+        tickFormatter={(value) => value.toString()}
+      />
+      {limit && (
+        <ReferenceLine
+          y={limit}
+          stroke="red"
+          strokeDasharray="3 3"
+          label={{ value: `Limit: ${limit.toFixed(0)} MB`, position: 'insideTopRight', fill: 'red', fontSize: 12 }}
+        />
+      )}
       <ChartTooltip
         cursor={false}
         content={<ChartTooltipContent indicator="dot" labelFormatter={(value) => new Date(value).toLocaleString()} />}
@@ -100,7 +118,6 @@ const UsageAreaChart = ({ data, podConfigs }: { data: any[], podConfigs: any }) 
           type="natural"
           fill={`url(#fill-${podName})`}
           stroke={podConfigs[podName].color}
-          stackId="a"
         />
       ))}
       <ChartLegend content={<ChartLegendContent />} />
@@ -114,11 +131,13 @@ export function PodUsageCharts() {
 
   const { data: cpuVector, isLoading: isCpuLoading } = useGetMetricByRange(1, 'pod_cpu_usage_range', timeRange);
   const { data: memoryVector, isLoading: isMemoryLoading } = useGetMetricByRange(1, 'pod_memory_usage_range', timeRange);
+  const { data: memoryLimitVector, isLoading: isMemoryLimitLoading } = useGetMetric(1, 'memory_limit');
 
   const { chartData: cpuChartData, podConfigs: cpuPodConfigs } = React.useMemo(() => transformUsageVectorForChart(cpuVector), [cpuVector]);
   const { chartData: memoryChartData, podConfigs: memoryPodConfigs } = React.useMemo(() => transformUsageVectorForChart(memoryVector), [memoryVector]);
+  const memoryLimit = React.useMemo(() => parseInstantVectorToSingleValue(memoryLimitVector), [memoryLimitVector]);
 
-  const isLoading = isCpuLoading || isMemoryLoading;
+  const isLoading = isCpuLoading || isMemoryLoading || isMemoryLimitLoading;
 
   return (
     <Card>
@@ -152,7 +171,7 @@ export function PodUsageCharts() {
             </div>
             <div>
                 <div className="text-center text-sm text-muted-foreground mb-2">Memory Usage (MB)</div>
-                <UsageAreaChart data={memoryChartData} podConfigs={memoryPodConfigs} />
+                <UsageAreaChart data={memoryChartData} podConfigs={memoryPodConfigs} limit={memoryLimit * 1024} />
             </div>
           </div>
         )}
