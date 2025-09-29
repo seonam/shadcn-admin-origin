@@ -1,41 +1,78 @@
-import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Header } from "@/components/layout/header";
+import { Main } from "@/components/layout/main";
+import { TopNav } from "@/components/layout/top-nav";
+import { ProfileDropdown } from "@/components/profile-dropdown";
+import { Search } from "@/components/search";
+import { ThemeSwitch } from "@/components/theme-switch";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import * as React from "react";
+import { Label, Pie, PieChart, RadialBar, RadialBarChart, PolarRadiusAxis } from "recharts";
+import { PodInfoTable } from "./components/pod-info-table";
+import { PodUsageCharts } from "./components/pod-usage-charts";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { TopNav } from '@/components/layout/top-nav'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import * as React from "react"
-import { Label, Pie, PieChart, RadialBar, RadialBarChart, PolarRadiusAxis } from "recharts"
-import { PodInfoTable } from "./components/pod-info-table"
-import { PodUsageCharts } from "./components/pod-usage-charts"
+  useGetMetric,
+  useGetMetricByRange,
+  InstantVector,
+  RangeVector,
+  DonutChartData,
+} from "./hooks/use-metrics";
 
-// --- Chart Components --- //
+// --- Data Types and Parsers --- //
+
+type ChartDisplayConfig = Record<string, { label: string; color: string }>;
+
+function parseInstantVectorToSingleValue(vector?: InstantVector): number {
+  try {
+    const value = vector?.data.result?.[0]?.value?.[1];
+    return value ? parseFloat(value) : 0;
+  } catch (error) {
+    console.error("Error parsing instant vector:", error);
+    return 0;
+  }
+}
+
+function parseRangeVectorToSingleValue(matrix?: RangeVector): number {
+  try {
+    const values = matrix?.data.result?.[0]?.values;
+    if (Array.isArray(values) && values.length > 0) {
+      const latestValue = values[values.length - 1]?.[1];
+      return latestValue ? parseFloat(latestValue) : 0;
+    }
+    return 0;
+  } catch (error) {
+    console.error("Error parsing range vector:", error);
+    return 0;
+  }
+}
+
+function parsePodStatusVector(vector?: InstantVector): DonutChartData[] {
+  if (!vector) return [];
+  const colorMap: Record<string, string> = {
+    Running: "var(--chart-2)",
+    Succeeded: "var(--chart-1)",
+    Pending: "var(--chart-3)",
+    Failed: "var(--chart-5)",
+  };
+  try {
+    return vector.data.result.map(item => {
+      const phase = item.metric.phase;
+      return {
+        name: phase,
+        value: parseFloat(item.value[1]),
+        fill: colorMap[phase] || "var(--chart-4)",
+      };
+    });
+  } catch (error) {
+    console.error("Error parsing pod status vector:", error);
+    return [];
+  }
+}
+
+// --- Main Dashboard Component --- //
 
 export default function Dashboard() {
-  const podStatusData = [
-    { status: "Running", count: 125, fill: "var(--chart-2)" },
-    { status: "Succeeded", count: 45, fill: "var(--chart-1)" },
-    { status: "Pending", count: 12, fill: "var(--chart-3)" },
-    { status: "Failed", count: 8, fill: "var(--chart-5)" },
-  ]
-
-  const resourceConfig = {
-    memory: { label: "Memory", color: "var(--chart-1)" },
-    cpu: { label: "CPU", color: "var(--chart-2)" },
-  }
-
-  const memoryData = [{ name: "Memory", used: 35.4, limit: 64 }]
-  const cpuData = [{ name: "CPU", used: 5.8, limit: 8 }]
-
   return (
     <>
       <Header>
@@ -49,65 +86,107 @@ export default function Dashboard() {
 
       <Main>
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Kubernetes Cluster Overview</CardTitle>
-              <CardDescription>An overview of pod statuses and resource usage.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-8">
-                {/* --- Pod Status Section --- */}
-                <div className="flex flex-col items-center w-full">
-                  <h3 className="text-lg font-semibold mb-4">Pod Status</h3>
-                  <DonutChart data={podStatusData} dataKey="count" nameKey="status" />
-                </div>
-
-                {/* --- Resource Usage Section --- */}
-                <div className="flex flex-col items-center w-full">
-                  <h3 className="text-lg font-semibold mb-4">Resource Usage</h3>
-                  <div className="w-full flex justify-around items-start gap-x-4 pt-6">
-                    <div className="flex-1 max-w-[250px]">
-                      <ChartRadial metricKey="memory" data={memoryData} config={resourceConfig} title="Memory" unit="Gi" />
-                    </div>
-                    <div className="flex-1 max-w-[250px]">
-                      <ChartRadial metricKey="cpu" data={cpuData} config={resourceConfig} title="CPU" unit="Cores" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
+          <KubernetesClusterOverview />
           <PodUsageCharts />
           <PodInfoTable />
         </div>
       </Main>
     </>
-  )
+  );
+}
+
+function KubernetesClusterOverview() {
+  const { data: podStatusVector, isLoading: podStatusLoading } = useGetMetric(1, "pod_status");
+  const { data: cpuLimitData, isLoading: cpuLimitLoading } = useGetMetric(1, "cpu_limit");
+  const { data: cpuUsageData, isLoading: cpuUsageLoading } = useGetMetricByRange(1, "cpu_usage");
+  const { data: memoryLimitData, isLoading: memoryLimitLoading } = useGetMetric(1, "memory_limit");
+  const { data: memoryUsageData, isLoading: memoryUsageLoading } = useGetMetricByRange(1, "memory_usage");
+
+  const isLoading = podStatusLoading || cpuLimitLoading || cpuUsageLoading || memoryLimitLoading || memoryUsageLoading;
+
+  const podStatusData = React.useMemo(() => parsePodStatusVector(podStatusVector), [podStatusVector]);
+  const cpuLimit = parseInstantVectorToSingleValue(cpuLimitData);
+  const cpuUsage = parseRangeVectorToSingleValue(cpuUsageData);
+  const memoryLimit = parseInstantVectorToSingleValue(memoryLimitData);
+  const memoryUsage = parseRangeVectorToSingleValue(memoryUsageData);
+
+  const cpuData = [{ name: "CPU", used: cpuUsage, limit: cpuLimit }];
+  const memoryData = [{ name: "Memory", used: memoryUsage, limit: memoryLimit }];
+
+  const resourceDisplayConfig: ChartDisplayConfig = {
+    memory: { label: "Memory", color: "var(--chart-1)" },
+    cpu: { label: "CPU", color: "var(--chart-2)" },
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Kubernetes Cluster Overview</CardTitle>
+        <CardDescription>An overview of pod statuses and resource usage.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-8 h-60">
+            <Skeleton className="w-full h-full" />
+            <Skeleton className="w-full h-full" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-8">
+            <div className="flex flex-col items-center w-full">
+              <h3 className="text-lg font-semibold mb-4">Pod Status</h3>
+              <DonutChart data={podStatusData} dataKey="value" nameKey="name" />
+            </div>
+            <div className="flex flex-col items-center w-full">
+              <h3 className="text-lg font-semibold mb-4">Resource Usage</h3>
+              <div className="w-full flex justify-around items-start gap-x-4 pt-6">
+                <div className="flex-1 max-w-[250px]">
+                  <ChartRadial
+                    metricKey="memory"
+                    data={memoryData}
+                    config={resourceDisplayConfig}
+                    title="Memory"
+                    unit="Gi"
+                    dataKey="used"
+                    limitKey="limit"
+                  />
+                </div>
+                <div className="flex-1 max-w-[250px]">
+                  <ChartRadial
+                    metricKey="cpu"
+                    data={cpuData}
+                    config={resourceDisplayConfig}
+                    title="CPU"
+                    unit="Cores"
+                    dataKey="used"
+                    limitKey="limit"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 const topNav = [
-  { title: 'Overview', href: 'dashboard/overview', isActive: true, disabled: false },
-  { title: 'Customers', href: 'dashboard/customers', isActive: false, disabled: true },
-  { title: 'Products', href: 'dashboard/products', isActive: false, disabled: true },
-  { title: 'Settings', href: 'dashboard/settings', isActive: false, disabled: true },
-]
-
+  { title: "Overview", href: "dashboard/overview", isActive: true, disabled: false },
+  { title: "Customers", href: "dashboard/customers", isActive: false, disabled: true },
+  { title: "Products", href: "dashboard/products", isActive: false, disabled: true },
+  { title: "Settings", href: "dashboard/settings", isActive: false, disabled: true },
+];
 
 // --- Chart Components --- //
 
-interface MetricData {
-  name: string
-  used: number
-  limit: number
-}
-
 interface ChartRadialProps {
   metricKey: string;
-  data: MetricData[];
-  config: any;
+  data: Record<string, any>[];
+  config: ChartDisplayConfig;
   title: string;
   unit?: string;
+  dataKey: string;
+  limitKey: string;
 }
 
 function ChartRadial({
@@ -116,21 +195,23 @@ function ChartRadial({
   config,
   title,
   unit = "",
+  dataKey,
+  limitKey,
 }: ChartRadialProps) {
-  const metricConfig = config[metricKey]
+  const metricConfig = config[metricKey];
   if (!metricConfig) {
-    console.warn(`No chartConfig found for metric "${metricKey}"`)
-    return null
+    console.warn(`No chartConfig found for metric "${metricKey}"`);
+    return null;
   }
 
-  const processed = data.map(d => ({
+  const processed = data.map((d) => ({
     ...d,
-    remaining: d.limit - d.used,
-  }))
+    remaining: d[limitKey] - d[dataKey],
+  }));
 
-  const used = processed[0]?.used ?? 0
-  const limit = processed[0]?.limit ?? 0
-  const percentage = limit > 0 ? (used / limit) * 100 : 0
+  const used = processed[0]?.[dataKey] ?? 0;
+  const limit = processed[0]?.[limitKey] ?? 0;
+  const percentage = limit > 0 ? (used / limit) * 100 : 0;
 
   return (
     <div className="flex flex-col items-center w-full">
@@ -142,13 +223,7 @@ function ChartRadial({
         config={{ [metricKey]: metricConfig }}
         className="relative aspect-square w-full max-w-[220px]"
       >
-        <RadialBarChart
-          data={processed}
-          startAngle={180}
-          endAngle={0}
-          innerRadius={80}
-          outerRadius={130}
-        >
+        <RadialBarChart data={processed} startAngle={180} endAngle={0} innerRadius={80} outerRadius={130}>
           <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
 
           <defs>
@@ -162,73 +237,49 @@ function ChartRadial({
             </linearGradient>
           </defs>
 
-          <RadialBar
-            dataKey="used"
-            cornerRadius={5}
-            fill={`url(#${metricKey}UsedGradient)`}
-            stackId="a"
-          />
-          <RadialBar
-            dataKey="remaining"
-            cornerRadius={5}
-            fill={`url(#${metricKey}RemGradient)`}
-            stackId="a"
-          />
+          <RadialBar dataKey={dataKey} cornerRadius={5} fill={`url(#${metricKey}UsedGradient)`} stackId="a" />
+          <RadialBar dataKey="remaining" cornerRadius={5} fill={`url(#${metricKey}RemGradient)`} stackId="a" />
 
           <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
             <Label
               content={({ viewBox }) => {
-                if (!viewBox || typeof viewBox.cx !== "number" || typeof viewBox.cy !== "number") return null
+                if (!viewBox || typeof viewBox.cx !== "number" || typeof viewBox.cy !== "number") return null;
                 return (
                   <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle">
-                    <tspan
-                      x={viewBox.cx}
-                      y={viewBox.cy - 10}
-                      className="fill-foreground text-xl font-bold"
-                    >
+                    <tspan x={viewBox.cx} y={viewBox.cy - 10} className="fill-foreground text-xl font-bold">
                       {percentage.toFixed(1)}%
                     </tspan>
                   </text>
-                )
+                );
               }}
             />
           </PolarRadiusAxis>
         </RadialBarChart>
       </ChartContainer>
     </div>
-  )
+  );
 }
 
-interface DonutChartData {
-  status: string
-  count: number
-  fill?: string
-}
-
-function DonutChart({
-  data,
-  dataKey,
-  nameKey,
-}: { data: DonutChartData[], dataKey: string, nameKey: string }) {
+function DonutChart({ data, dataKey, nameKey }: { data: Record<string, any>[]; dataKey: string; nameKey: string }) {
   const chartData = React.useMemo(() => {
     return data.map((item, index) => ({
       ...item,
       fill: item.fill || `var(--chart-${index + 1})`,
-    }))
-  }, [data])
+    }));
+  }, [data]);
 
-  const chartConfig = React.useMemo(() => {
-    const config: any = { [dataKey]: { label: dataKey } }
+  const chartConfig: ChartDisplayConfig = React.useMemo(() => {
+    const config: ChartDisplayConfig = { [dataKey]: { label: dataKey, color: "hsl(var(--foreground))" } };
     chartData.forEach((item) => {
-      config[item[nameKey]] = { label: item[nameKey], color: item.fill }
-    })
-    return config
-  }, [chartData, dataKey, nameKey])
+      config[item[nameKey]] = { label: item[nameKey], color: item.fill };
+    });
+    return config;
+  }, [chartData, dataKey, nameKey]);
 
   const totalValue = React.useMemo(
     () => chartData.reduce((acc, curr) => acc + curr[dataKey], 0),
     [chartData, dataKey]
-  )
+  );
 
   return (
     <div className="flex w-full items-center gap-6">
@@ -249,7 +300,7 @@ function DonutChart({
                           Pods
                         </tspan>
                       </text>
-                    )
+                    );
                   }
                 }}
               />
@@ -271,5 +322,6 @@ function DonutChart({
         ))}
       </div>
     </div>
-  )
+  );
 }
+
