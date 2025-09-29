@@ -26,57 +26,40 @@ import {
   CartesianGrid,
 } from 'recharts'
 import * as React from "react"
-
-// --- MOCK DATA GENERATION (Simulating Prometheus API) ---
-const POD_NAMES = [
-  "frontend-api-6b7b8c9c-x4v2f",
-  "worker-jobs-7a8c9d0e-q5r6t",
-  "database-connector-f9g0h1i2-z3y4x",
-];
-const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)"];
-
-const generateMockData = (pods: string[], timeMinutes: number, unit: 'cores' | 'MB') => {
-  const now = Date.now();
-  const data: any[] = [];
-  for (const pod of pods) {
-    const values: [number, string][] = [];
-    for (let i = timeMinutes; i >= 0; i--) {
-      const timestamp = Math.floor((now - i * 60 * 1000) / 1000);
-      let value;
-      if (unit === 'cores') {
-        value = (Math.random() * (pod.includes('api') ? 0.5 : 1.5)).toFixed(2);
-      } else { // MB
-        value = (Math.random() * (pod.includes('api') ? 300 : 800)).toFixed(0);
-      }
-      values.push([timestamp, value]);
-    }
-    data.push({ metric: { pod }, values });
-  }
-  return data;
-};
+import { useGetMetricByRange, RangeVector } from "../hooks/use-metrics";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // --- DATA TRANSFORMATION ---
-const transformDataForChart = (prometheusResult: any[]) => {
-  if (!prometheusResult || prometheusResult.length === 0) return [];
+const transformUsageVectorForChart = (vector?: RangeVector) => {
+  if (!vector?.data.result) return [];
+  
   const timestamps = new Set<number>();
-  prometheusResult.forEach(series => {
-    series.values.forEach(([ts]: [number, string]) => timestamps.add(ts));
+  vector.data.result.forEach(series => {
+    series.values.forEach(([ts]) => timestamps.add(ts));
   });
 
   const sortedTimestamps = Array.from(timestamps).sort();
 
-  return sortedTimestamps.map(ts => {
-    const dataPoint: any = { date: ts * 1000 }; // Use 'date' for XAxis
-    prometheusResult.forEach(series => {
-      const valueEntry = series.values.find(([timestamp]: [number, string]) => timestamp === ts);
+  const podNames = vector.data.result.map(s => s.metric.pod);
+  const podConfigs = podNames.reduce((acc, podName, index) => {
+    acc[podName] = { label: podName, color: `var(--chart-${index + 1})` };
+    return acc;
+  }, {} as Record<string, { label: string; color: string }>);
+
+  const chartData = sortedTimestamps.map(ts => {
+    const dataPoint: any = { date: ts * 1000 };
+    vector.data.result.forEach(series => {
+      const valueEntry = series.values.find(([timestamp]) => timestamp === ts);
       dataPoint[series.metric.pod] = valueEntry ? parseFloat(valueEntry[1]) : null;
     });
     return dataPoint;
   });
+
+  return { chartData, podConfigs };
 };
 
 // --- Reusable Area Chart Component ---
-const UsageAreaChart = ({ data, unit, podConfigs }: { data: any[], unit: string, podConfigs: any }) => (
+const UsageAreaChart = ({ data, podConfigs }: { data: any[], podConfigs: any }) => (
   <ChartContainer config={podConfigs} className="aspect-auto h-[250px] w-full">
     <AreaChart data={data}>
       <defs>
@@ -107,6 +90,7 @@ const UsageAreaChart = ({ data, unit, podConfigs }: { data: any[], unit: string,
           type="natural"
           fill={`url(#fill-${podName})`}
           stroke={podConfigs[podName].color}
+          stackId="a"
         />
       ))}
       <ChartLegend content={<ChartLegendContent />} />
@@ -118,18 +102,13 @@ const UsageAreaChart = ({ data, unit, podConfigs }: { data: any[], unit: string,
 export function PodUsageCharts() {
   const [timeRange, setTimeRange] = React.useState("15m");
 
-  const timeMinutes = parseInt(timeRange.replace('m', ''));
+  const { data: cpuVector, isLoading: isCpuLoading } = useGetMetricByRange(1, 'pod_cpu_usage_range', timeRange);
+  const { data: memoryVector, isLoading: isMemoryLoading } = useGetMetricByRange(1, 'pod_memory_usage_range', timeRange);
 
-  const mockCpuData = generateMockData(POD_NAMES, timeMinutes, 'cores');
-  const mockMemoryData = generateMockData(POD_NAMES, timeMinutes, 'MB');
+  const { chartData: cpuChartData, podConfigs: cpuPodConfigs } = React.useMemo(() => transformUsageVectorForChart(cpuVector), [cpuVector]);
+  const { chartData: memoryChartData, podConfigs: memoryPodConfigs } = React.useMemo(() => transformUsageVectorForChart(memoryVector), [memoryVector]);
 
-  const transformedCpuData = transformDataForChart(mockCpuData);
-  const transformedMemoryData = transformDataForChart(mockMemoryData);
-
-  const podChartConfig = POD_NAMES.reduce((acc, podName, index) => {
-    acc[podName] = { label: podName, color: COLORS[index % COLORS.length] };
-    return acc;
-  }, {} as any);
+  const isLoading = isCpuLoading || isMemoryLoading;
 
   return (
     <Card>
@@ -150,16 +129,23 @@ export function PodUsageCharts() {
         </Select>
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+        {isLoading ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[250px]">
+            <Skeleton className="w-full h-full" />
+            <Skeleton className="w-full h-full" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
             <div>
                 <div className="text-center text-sm text-muted-foreground mb-2">CPU Usage (cores)</div>
-                <UsageAreaChart data={transformedCpuData} unit="c" podConfigs={podChartConfig} />
+                <UsageAreaChart data={cpuChartData} podConfigs={cpuPodConfigs} />
             </div>
             <div>
                 <div className="text-center text-sm text-muted-foreground mb-2">Memory Usage (MB)</div>
-                <UsageAreaChart data={transformedMemoryData} unit="MB" podConfigs={podChartConfig} />
+                <UsageAreaChart data={memoryChartData} podConfigs={memoryPodConfigs} />
             </div>
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

@@ -131,7 +131,7 @@ function KubernetesClusterOverview() {
             <Skeleton className="w-full h-full" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 items-start gap-8">
+          <div className="grid grid-cols-1 lg: grid-cols-2 items-start gap-8">
             <div className="flex flex-col items-center w-full">
               <h3 className="text-lg font-semibold mb-4">Pod Status</h3>
               <DonutChart data={podStatusData} dataKey="value" nameKey="name" />
